@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="theme-color" content="#2e7d32">
+
+<title>BalanceVet</title>
+
+<link rel="manifest" href="manifest.json">
+
+<link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
+<script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+
+<style>
+:root{
+    --verde:#2e7d32;
+    --verde-claro:#e8f5e9;
+    --verde-destaque:#66bb6a;
+    --branco:#ffffff;
+}
+
+body{
+    margin:0;
+    padding:12px;
+    font-family:Arial,sans-serif;
+    background:var(--verde-claro);
+    color:var(--verde);
+}
+
+.title{
+    text-align:center;
+    font-family:'Pacifico',cursive;
+    font-size:36px;
+    margin-bottom:12px;
+}
+
+.app{
+    display:flex;
+    flex-direction:column;
+    gap:16px;
+}
+
+/* === SEÇÕES === */
+.viewer-column,
+.table-column,
+.form-column{
+    background:var(--branco);
+    padding:12px;
+    border-radius:12px;
+    box-shadow:0 4px 12px rgba(0,0,0,.08);
+}
+
+/* TÍTULOS ALINHADOS */
+.section-title{
+    font-family:'Pacifico',cursive;
+    font-size:18px;
+    text-align:center;
+    margin:0 0 8px 0;
+}
+
+/* MODEL VIEWER MOBILE */
+model-viewer{
+    width:100%;
+    height:360px;
+    background:#f7f7f7;
+    border-radius:8px;
+}
+
+/* CONTROLES */
+.controls{
+    margin-top:8px;
+    display:flex;
+    gap:6px;
+    flex-wrap:wrap;
+    justify-content:center;
+}
+
+.controls button{
+    padding:6px 10px;
+    font-size:12px;
+    border-radius:6px;
+    border:1px solid var(--verde);
+    background:white;
+    color:var(--verde);
+}
+
+.controls button[aria-pressed="true"]{
+    background:var(--verde-destaque);
+    color:white;
+}
+
+/* TABELA */
+table{
+    width:100%;
+    border-collapse:collapse;
+    font-size:12px;
+}
+th,td{
+    padding:6px;
+    border-bottom:1px solid #ddd;
+}
+th{
+    background:var(--verde-claro);
+}
+.color-dot{
+    width:12px;
+    height:12px;
+    border-radius:50%;
+    display:inline-block;
+    border:1px solid #333;
+}
+
+/* FORMULÁRIO */
+label{
+    font-size:12px;
+    display:block;
+    margin-top:6px;
+}
+input,textarea{
+    width:100%;
+    padding:6px;
+    font-size:12px;
+    border:1px solid #ddd;
+    border-radius:6px;
+}
+textarea{
+    min-height:50px;
+}
+
+/* HOTSPOTS */
+model-viewer ::slotted(.hotspot-point){
+    width:14px;height:14px;border-radius:50%;
+    border:2px solid white;
+    transform:translate(-50%,-50%);
+}
+model-viewer ::slotted(.hotspot-label){
+    background:white;
+    border:1px solid;
+    padding:4px 6px;
+    border-radius:4px;
+    font-size:11px;
+    transform:translate(-50%,-120%);
+}
+</style>
+</head>
+
+<body>
+
+<div class="title">BalanceVet</div>
+
+<div class="app">
+
+<div class="viewer-column">
+    <div class="section-title">Modelo 3D</div>
+
+    <model-viewer id="viewer" camera-controls interaction-prompt="none"></model-viewer>
+
+    <div class="controls">
+        <input type="file" id="fileInput" accept=".glb">
+        <button id="acupBtn" aria-pressed="false">Modo acupuntura</button>
+        <button id="saveBtn">Salvar</button>
+        <button id="loadBtn">Carregar</button>
+        <input type="file" id="jsonInput" accept=".json" hidden>
+    </div>
+</div>
+
+<div class="table-column">
+    <div class="section-title">Pontos de Acupuntura</div>
+    <table>
+        <thead>
+            <tr><th>Cor</th><th>#</th><th>Nome</th></tr>
+        </thead>
+        <tbody id="pointsTable"></tbody>
+    </table>
+</div>
+
+<div class="form-column">
+    <div class="section-title">Mini-prontuário</div>
+
+    <label>Data</label><input type="date" id="data">
+    <label>Nome do tutor</label><input type="text" id="tutor">
+    <label>Nome do paciente</label><input type="text" id="paciente">
+    <label>Idade</label><input type="number" id="idade">
+    <label>Queixa</label><textarea id="queixa"></textarea>
+    <label>Tratamento</label><textarea id="tratamento"></textarea>
+    <label>Resultados</label><textarea id="resultados"></textarea>
+    <label>Observações</label><textarea id="observacoes"></textarea>
+</div>
+
+</div>
+
+<script>
+/* === REGISTRO SERVICE WORKER === */
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js');
+}
+
+/* === LÓGICA ORIGINAL (INALTERADA) === */
+
+const viewer=document.getElementById("viewer");
+const fileInput=document.getElementById("fileInput");
+const jsonInput=document.getElementById("jsonInput");
+const acupBtn=document.getElementById("acupBtn");
+const saveBtn=document.getElementById("saveBtn");
+const loadBtn=document.getElementById("loadBtn");
+const table=document.getElementById("pointsTable");
+
+const prontuarioFields={data,tutor,paciente,idade,queixa,tratamento,resultados,observacoes};
+
+let acupMode=false,hotspotIndex=0,pointerDown=null;
+const pointsData=[];
+
+fileInput.onchange=()=>viewer.src=URL.createObjectURL(fileInput.files[0]);
+
+acupBtn.onclick=()=>{
+    acupMode=!acupMode;
+    acupBtn.setAttribute("aria-pressed",acupMode);
+};
+
+viewer.addEventListener("pointerdown",e=>{
+    if(acupMode) pointerDown={x:e.clientX,y:e.clientY};
+});
+
+viewer.addEventListener("pointerup",e=>{
+    if(!acupMode||!pointerDown) return;
+    const hit=viewer.positionAndNormalFromPoint(e.clientX,e.clientY);
+    if(!hit) return;
+
+    const name=prompt("Nome do ponto:");
+    if(!name) return;
+
+    const id=++hotspotIndex;
+    const color=`hsl(${Math.random()*360},70%,50%)`;
+    const p=hit.position;
+
+    const point=document.createElement("button");
+    point.className="hotspot-point";
+    point.slot=`hotspot-${id}`;
+    point.dataset.position=`${p.x} ${p.y} ${p.z}`;
+    point.style.background=color;
+
+    const label=document.createElement("div");
+    label.className="hotspot-label";
+    label.slot=`hotspot-${id}`;
+    label.dataset.position=`${p.x} ${p.y+0.03} ${p.z}`;
+    label.textContent=name;
+    label.style.borderColor=color;
+
+    const row=document.createElement("tr");
+    row.innerHTML=`<td><span class="color-dot" style="background:${color}"></span></td><td>${id}</td><td>${name}</td>`;
+
+    const remove=()=>{
+        viewer.removeChild(point);
+        viewer.removeChild(label);
+        table.removeChild(row);
+        pointsData.splice(pointsData.findIndex(pt=>pt.id===id),1);
+    };
+
+    point.onclick=e=>{e.stopPropagation();remove()};
+    label.onclick=e=>{e.stopPropagation();remove()};
+    row.onclick=remove;
+
+    viewer.append(point,label);
+    table.append(row);
+    pointsData.push({id,name,color,position:p});
+});
+
+saveBtn.onclick=()=>{
+    const prontuario={};
+    for(const k in prontuarioFields) prontuario[k]=prontuarioFields[k].value;
+
+    const pacienteNome=(prontuario.paciente||"balancevet")
+        .trim().replace(/[\\\/:*?"<>|]+/g,"_");
+
+    const blob=new Blob([JSON.stringify({prontuario,pontos:pointsData},null,2)],{type:"application/json"});
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(blob);
+    a.download=`${pacienteNome}.json`;
+    a.click();
+};
+
+loadBtn.onclick=()=>jsonInput.click();
+
+jsonInput.onchange=()=>{
+    const r=new FileReader();
+    r.onload=()=>{
+        const data=JSON.parse(r.result);
+
+        for(const k in prontuarioFields){
+            prontuarioFields[k].value=data.prontuario?.[k]||"";
+        }
+
+        viewer.querySelectorAll(".hotspot-point,.hotspot-label").forEach(e=>e.remove());
+        table.innerHTML="";
+        pointsData.length=0;
+        hotspotIndex=0;
+
+        data.pontos.forEach(p=>{
+            hotspotIndex=Math.max(hotspotIndex,p.id);
+            pointsData.push(p);
+
+            const point=document.createElement("button");
+            point.className="hotspot-point";
+            point.slot=`hotspot-${p.id}`;
+            point.dataset.position=`${p.position.x} ${p.position.y} ${p.position.z}`;
+            point.style.background=p.color;
+
+            const label=document.createElement("div");
+            label.className="hotspot-label";
+            label.slot=`hotspot-${p.id}`;
+            label.dataset.position=`${p.position.x} ${p.position.y+0.03} ${p.position.z}`;
+            label.textContent=p.name;
+            label.style.borderColor=p.color;
+
+            const row=document.createElement("tr");
+            row.innerHTML=`<td><span class="color-dot" style="background:${p.color}"></span></td><td>${p.id}</td><td>${p.name}</td>`;
+
+            const remove=()=>{
+                viewer.removeChild(point);
+                viewer.removeChild(label);
+                table.removeChild(row);
+            };
+
+            point.onclick=e=>{e.stopPropagation();remove()};
+            label.onclick=e=>{e.stopPropagation();remove()};
+            row.onclick=remove;
+
+            viewer.append(point,label);
+            table.append(row);
+        });
+    };
+    r.readAsText(jsonInput.files[0]);
+};
+</script>
+
+</body>
+</html>
